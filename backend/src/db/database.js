@@ -1,9 +1,8 @@
 const initSqlJs = require("sql.js");
 const bcrypt = require("bcryptjs");
-
+const path = require("path");
 let db;
 
-// Using source.unsplash.com which works reliably in browsers + fallback to picsum
 const products = [
   {
     id: 1,
@@ -248,25 +247,78 @@ const products = [
 ];
 
 async function initDB() {
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({
+    locateFile: (file) => {
+      return path.join(
+        process.cwd(),
+        "backend",
+        "node_modules",
+        "sql.js",
+        "dist",
+        file,
+      );
+    },
+  });
+
   db = new SQL.Database();
 
-  db.run(
-    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-  );
-  db.run(
-    `CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL, description TEXT, material TEXT, stock INTEGER DEFAULT 0, rating REAL DEFAULT 0, reviews INTEGER DEFAULT 0, image TEXT, images TEXT, badge TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
-  );
-  db.run(
-    `CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, items TEXT NOT NULL, total REAL NOT NULL, status TEXT DEFAULT 'pending', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))`,
-  );
-  db.run(
-    `CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, product_id INTEGER NOT NULL, UNIQUE(user_id, product_id), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (product_id) REFERENCES products(id))`,
-  );
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-  const insertProduct = db.prepare(
-    `INSERT OR IGNORE INTO products (id, name, category, price, description, material, stock, rating, reviews, image, images, badge) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+  db.run(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price REAL NOT NULL,
+      description TEXT,
+      material TEXT,
+      stock INTEGER DEFAULT 0,
+      rating REAL DEFAULT 0,
+      reviews INTEGER DEFAULT 0,
+      image TEXT,
+      images TEXT,
+      badge TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      items TEXT NOT NULL,
+      total REAL NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS wishlist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      UNIQUE(user_id, product_id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    )
+  `);
+
+  const insertProduct = db.prepare(`
+    INSERT OR IGNORE INTO products
+    (id, name, category, price, description, material, stock, rating, reviews, image, images, badge)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
   products.forEach((p) =>
     insertProduct.run([
       p.id,
@@ -283,16 +335,20 @@ async function initDB() {
       p.badge,
     ]),
   );
+
   insertProduct.free();
 
   const hashedPassword = bcrypt.hashSync("demo123", 10);
+
   const stmt = db.prepare(
     "INSERT OR IGNORE INTO users (name, email, password) VALUES (?, ?, ?)",
   );
+
   stmt.run(["Demo User", "demo@aurelia.com", hashedPassword]);
   stmt.free();
 
   console.log("✅ Database initialized with seed data");
+
   return db;
 }
 
